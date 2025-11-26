@@ -68,8 +68,9 @@ def read_zip_shapefile_in_memory(file_content: bytes) -> geopandas.GeoDataFrame:
 
 
 @app.get("/")
-def read_root():
-    return {"Hello": "World"}
+def health_check():
+    """Endpoint untuk health check dari Render."""
+    return {"status": "ok", "message": "API is running"}
 
 # Endpoint Stage 2 (Diperbarui untuk Stage 7)
 @app.post("/buffer")
