@@ -71,19 +71,49 @@ def read_zip_shapefile_in_memory(file_content: bytes) -> geopandas.GeoDataFrame:
 def read_root():
     return {"Hello": "World"}
 
-# Endpoint Stage 2
+# Endpoint Stage 2 (Diperbarui untuk Stage 7)
 @app.post("/buffer")
 async def buffer(
     current_user: Annotated[dict, Depends(get_current_user)],
     geojson_polygon: UploadFile = File(...),
     buffer_value: int = Form(...)
 ):
-    print(f"Request received from authenticated user: {current_user.id}")
-    
-    gdf = geopandas.read_file(geojson_polygon.file)
-    gdf_project = gdf.to_crs(3395)
-    gdf_buffer = gdf_project.buffer(buffer_value).to_crs(4326)
-    return json.loads(gdf_buffer.to_json())
+    try:
+        print(f"Request received from authenticated user: {current_user.id}")
+        
+        # Baca GeoJSON. Asumsikan inputnya dalam EPSG:4326 (standar web)
+        gdf = geopandas.read_file(geojson_polygon.file)
+        if gdf.crs is None:
+            # Jika CRS tidak ada, asumsikan EPSG:4326
+            gdf.set_crs("EPSG:4326", inplace=True)
+        else:
+            # Jika ada, pastikan itu EPSG:4326
+            gdf = gdf.to_crs("EPSG:4326")
+
+        # --- Logika Inti Stage 7 ---
+        # 1. Estimasi CRS UTM yang paling sesuai untuk poligon 
+        # Melihat pusat dari geometri
+        utm_crs = gdf.estimate_utm_crs()
+        print(f"Detected optimal UTM CRS: {utm_crs.to_string()}")
+
+        # 2. Proyeksikan ke CRS UTM yang terdeteksi untuk operasi buffer yang akurat
+        gdf_projected = gdf.to_crs(utm_crs)
+
+        # 3. Lakukan buffer dalam satuan meter pada sistem proyeksi UTM
+        gdf_buffered_projected = gdf_projected.buffer(buffer_value)
+
+        # 4. Proyeksikan kembali hasilnya ke EPSG:4326 agar bisa ditampilkan di peta Leaflet
+        gdf_buffer_final = gdf_buffered_projected.to_crs("EPSG:4326")
+        
+        # Ubah hasil GeoSeries menjadi GeoDataFrame sebelum diekspor ke JSON
+        result_gdf = geopandas.GeoDataFrame(geometry=gdf_buffer_final, crs="EPSG:4326")
+
+        return json.loads(result_gdf.to_json())
+
+    except Exception as e:
+        print(f"Error during buffer processing: {e}")
+        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
+
 
 # Endpoint Stage 6 
 @app.post("/process")
